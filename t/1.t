@@ -4,7 +4,7 @@
 #########################
 
 use strict;
-use Test::More tests => 13;
+use Test::More tests => 15;
 BEGIN { use_ok('HTML::Manipulator') };
 
 #########################
@@ -259,6 +259,29 @@ HTML
 is ( HTML::Manipulator::replace($before, 
     link => { href => "new 'href", _content => $testname}
 ), $after, $testname);
+
+# ===================================
+
+$testname = 'extract the document title';
+
+$before = <<HTML;
+<title>$testname</title>
+HTML
+
+
+is ( HTML::Manipulator::extract_title($before), $testname, $testname);
+
+# ===================================
+
+$testname = 'replace the document title';
+
+$after = <<HTML;
+<title>$testname</title>
+HTML
+
+is ( HTML::Manipulator::replace_title($before, $testname),
+	$after, $testname);
+	
 
 
 

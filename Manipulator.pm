@@ -3,13 +3,26 @@ use strict;
 
 package HTML::Manipulator;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 
 sub replace{
     my ($html, %data) = @_;
     my $parser = new HTML::Manipulator::Replacer( 
         \%data );
+    if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
+          $parser->parse_file($html);
+    }
+    else{
+        $parser->parse($html);
+        $parser->eof;
+    }
+    return $parser->{_collect};
+}
+
+sub replace_title{
+    my ($html, $title) = @_;
+    my $parser = new HTML::Manipulator::TitleReplacer( $title);
     if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
           $parser->parse_file($html);
     }
@@ -74,6 +87,19 @@ sub extract_all_ids{
         $parser->eof;
     }
     return $parser->{_found} || {} ;
+}
+
+sub extract_title{
+	my ($html) = @_;
+	my $parser = new HTML::Manipulator::TitleExtractor();
+	 if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
+          $parser->parse_file($html);
+    }
+    else{
+        $parser->parse($html);
+        $parser->eof;
+    }
+    return $parser->{_found};
 }
 
 package HTML::Manipulator::Replacer;
@@ -232,6 +258,89 @@ sub new{
     return $self;
 }
 
+package HTML::Manipulator::TitleExtractor;
+use base qw(HTML::Parser);
+
+sub start_handler{
+    my ($self, $type, $text, $skip) = @_;
+    if (exists $self->{_watch_for}){
+         $self->{_found} .= $skip . $text;
+         return;
+    }
+    if ($type eq 'title'){
+	    $self->{_watch_for} = 1;
+    }
+}
+
+sub end_handler{
+	 my ($self, $type, $text, $skip) = @_;
+	if (exists $self->{_watch_for}){
+		$self->{_found} .= $skip;
+		if ($type eq 'title'){
+			delete $self->{_watch_for};
+		}
+		else{
+			$self->{_found} .= $text;
+		}
+	}
+   }
+
+
+sub new{
+    my ($class, @args) = @_;
+    my $self= HTML::Parser::new ( $class,
+        start_h => ['start_handler', "self,tagname, text, skipped_text"],
+        end_h => ['end_handler', "self,tagname, text, skipped_text"],
+    );
+    
+    return $self;
+}
+
+package HTML::Manipulator::TitleReplacer;
+use base qw(HTML::Parser);
+
+sub start_handler{
+    my ($self, $type, $text, $skip) = @_;
+    unless (exists $self->{_watch_for}){
+	    $self->{_collect} .= $skip . $text;
+	    if ($type eq 'title'){
+		    $self->{_watch_for} = 1;
+	    }
+    }
+}
+
+sub end_handler{
+	 my ($self, $type, $text, $skip) = @_;
+	if (exists $self->{_watch_for}){
+		if ($type eq 'title'){
+			delete $self->{_watch_for};
+			$self->{_collect} .= $self->{_new_title};
+		}
+		else{
+			$self->{_collect} .= $skip;
+		}
+		$self->{_collect} .= $text;
+	}
+	else{
+		$self->{_collect} .= $skip.$text;
+	}
+   }
+
+sub end_document_handler{
+    my ($self, $text) = @_;
+    $self->{_collect} .= $text;
+}
+
+sub new{
+    my ($class, $title) = @_;
+    my $self= HTML::Parser::new ( $class,
+        start_h => ['start_handler', "self,tagname, text, skipped_text"],
+        end_h => ['end_handler', "self,tagname, text, skipped_text"],
+	end_document_h =>['end_document_handler', "self, skipped_text"],
+    );
+    $self->{_new_title} = $title;
+    return $self;
+}
 
 
 
@@ -282,6 +391,13 @@ HTML::Manipulator is NOT yet another templating module.
 There are, for example, no template files. It works on normal HTML files
 without any special markup (you only have to give element IDs to tags you are
 interested in). 
+
+While you could probably use this module for
+producing your web application's output, DON'T.
+It does not offer a lot of features for this area
+(no loops, no conditionals, no includes) and is not
+optimized for performance. Have a look at
+L<HTML::Template> instead.
 
 =head2 ABOUT THE INPUT HTML FILES
 
@@ -371,6 +487,12 @@ adding the special "attribute" _content to the attribute hashref.
         href=>'http://www.slashdot.org/' }
     );
 
+=head3 Replace the document title
+
+You can set the document title (the stuff between
+the <title> tags) like
+
+	my $new = HTML::Manipulator::replace_title($html, 'new title');
 
 =head2 FUNCTIONS TO EXTRACT CONTENT
 
@@ -426,7 +548,12 @@ This returns a hashref where the element IDs of the document
 are they keys. The associated value is the type of the 
 element (the tag type, such as div, span, a), which
 is returned as lowercase.
-	
+
+=head3 Find out the document title
+
+	my $title = HTML::Manipulator::extract_title($html);
+
+
 =head2 USING FILEHANDLES
 
 You can also call all of the above functions with a file handle instead of the
@@ -455,14 +582,13 @@ You have to prefix the full module name to use them.
 If you want an object-oriented interface instead,
 consider L<HTML::Manipulator::Document>.
 
-
 =head1 SEE ALSO
 
 =head2 Processing HTML documents
 
 HTML::Manipulator uses L<HTML::Parser> for parsing the input file. 
 If you find yourself in the unfortunate situation of having to process HTML, have a look
-at that module, too. 
+at that module. 
 
 For specific purposes there are also some other modules to work with, for example
 
@@ -507,6 +633,10 @@ L<Petal> (innovative, uses attributes rather than tags for markup)
 
 =back
 
+=head2 Managing complete (static) web sites
+
+A great tool to produce and manage a large number
+of related static HTML pages is L<HTML::WebMake>.
 
 
 

@@ -1,7 +1,7 @@
 #########################
 
 use strict;
-use Test::More tests => 9;
+use Test::More tests => 12;
 BEGIN { use_ok('HTML::Manipulator::Document') };
 
 #########################
@@ -155,5 +155,44 @@ ok ( (ref $data
     , $testname);
     
     
+# ===================================
+
+$testname = 'method "extract_title"';
+
+$before = <<HTML;
+<title>$testname</title>
+HTML
+
+$obj = HTML::Manipulator::Document->from_string($before);
+
+is ( $obj->extract_title(), $testname, $testname);
+
+# ===================================
+
+$testname = 'method "replace_title"';
+
+$after = <<HTML;
+<title>$testname</title>
+HTML
+
+$obj = HTML::Manipulator::Document->from_string($before);
+
+is ( $obj->replace_title($testname), $after, $testname);
+
+# ==========================
+
+$testname = 'method save_as';
+
+$before = <<HTML;
+<title>$testname</title>
+HTML
+
+use File::Spec;
+$one = File::Spec->catfile(File::Spec->tmpdir, 'htmlmanipulator', 't2_saveas.html');
+$obj = HTML::Manipulator::Document->from_string($before);
+$obj->save_as($one);
+ok ( -e $one, $testname);
+unlink $one;
+rmdir File::Spec->catfile(File::Spec->tmpdir, 'htmlmanipulator');
 
 

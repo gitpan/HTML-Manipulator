@@ -3,7 +3,7 @@ use HTML::Manipulator;
 
 package HTML::Manipulator::Document;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use Carp;
 
@@ -41,6 +41,14 @@ sub replace{
 			$self->{html}, @args);
 }
 
+sub replace_title{
+	my ($self, @args) = @_;
+	$self->{html}
+		= HTML::Manipulator::replace_title(
+			$self->{html}, @args);
+}
+
+
 sub extract{
 	my ($self, @args) = @_;
 	HTML::Manipulator::extract(
@@ -71,6 +79,26 @@ sub extract_all_ids{
 			$self->{html}, @args);
 }
 
+sub extract_title{
+	my ($self) = @_;
+	HTML::Manipulator::extract_title($self->{html});
+}
+
+sub save_as{
+	my ($self, $filename) = @_;
+	require File::Spec;
+	my (@path) = File::Spec->splitdir($filename);
+	pop @path;
+	my $mkdir= '';
+	while (@path){
+		$mkdir = File::Spec->catfile($mkdir, shift @path);
+		mkdir $mkdir unless -e $mkdir;
+	}
+	require FileHandle;
+	my $fh = new FileHandle($filename, 'w') or croak "failed to open the file $filename for saving HTML: $!";
+	print $fh  $self->as_string;
+	$fh->close;
+}
 
 1;
 __END__
@@ -87,13 +115,15 @@ HTML::Manipulator::Document - object-oriented interface to HTML::Manipulator
    print $doc->replace('headline'=>'New Headline');
    
    print $doc->as_string;
+   
+   $doc->save_as('/some/file.html');
  
 =head1 DESCRIPTION
 
 This module provides an object-oriented interface
 to the functions of the L<HTML::Manipulator> module.
-It also has an additional feature to load HTML from
-file.
+It also has the additional features to load HTML from
+and save it to a file.
 
 You use it by calling one of the two constructor
 methods, which return an object of this class.
@@ -139,16 +169,28 @@ The methods return the same results as the functions
 they wrap. See L<HTML::Manipulator> for details
 on what functions there are and how they work.
 
-=head2 replace() method
+=head2 replace() methods
 
 In addition to returning the new HTML text,
-the replace() method also changes the content
+the replace() methods also changes the content
 of the HTML document represented by the object.
 
 =head2 as_string() method
 
 Use this method to get the HTML content
 from the object.
+
+=head2 save_as() method
+
+This method lets you save the HTML content
+of the object to a file:
+
+	$doc->save_as('/path/to/file');
+
+Any missing directories leading up to the
+file will be created automatically (if possible).
+If the file could not be created, the method
+croaks.
 
 =head1 SEE ALSO
 
