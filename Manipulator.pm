@@ -3,7 +3,7 @@ use strict;
 
 package HTML::Manipulator;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 
 sub replace{
@@ -95,6 +95,12 @@ sub start_handler{
     my %new_values;
     if (ref $content){
         %new_values = %$content;
+        foreach (keys %new_values){
+            if ($_ ne lc $_){
+                 $new_values{lc $_} = delete $new_values{$_};
+            }
+        }
+        
         $content = delete $new_values{'_content'};
     }
     
@@ -287,13 +293,15 @@ All you have to do is give those elements a DOM ID, for example
     
 No other markup is necessary.
 
+=head3 Malformed HTML (is fine)
+
 HTML::Manipulator tries to cope with malformed input data.
 All you have to ensure is that you properly close
 the element you are working on (any other tags can be unbalanced) and that the IDs are unique.
  It will also preserve the content outside the element you asked it to operate on. It does not
 rewrite your HTML any more than it has to. 
 
-=head4 Case insensitivity
+=head3 Case insensitivity issues
 
 HTML is case insensitive in its tag and attribute names.
 This means that
@@ -308,6 +316,13 @@ are treated as identical.
 
 However, HTML::Manipulator respects
 case when comparing the IDs of elements (not sure about the HTML standard here), so that you could NOT address above h3 element as HeadLine77.
+
+When HTML::Manipulator has to rewrite tags (this happens
+when you ask it to change element attributes) it will output
+the tag and attribute names as lower-case. It will also
+rearrange their order. When changing only
+the content of an element, it preserves the original opening and
+closing tags.
 
 =head2 FUNCTIONS TO CHANGE CONTENT
 

@@ -1,4 +1,8 @@
 Revision history for Perl extension HTML::Manipulator.
 
+0.02  Thu Apr 22 2004
+	- attributes to be replaced can now be specified in mixed case 
+		(will appear lower-cased in the output though)
+
 0.01  Tue Apr 20 2004
 	- original version

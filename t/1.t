@@ -72,7 +72,7 @@ $before = <<HTML;
 <html>
 <body>
 <div id=simple>
-<a href='link' id=link>link</a><b>text<i>yyy</b>
+<a Href='link' id=link>link</a><b>text<i>yyy</b>
 </div>
 </body>
 </html>
@@ -87,9 +87,9 @@ $after = <<HTML;
 </body>
 </html>
 HTML
-
+#also checking some case sensitivity issues here
 is ( HTML::Manipulator::replace($before, 
-    link => { href => 'new href', _content => $testname}
+    link => { HREF => 'new href', _content => $testname}
 ), $after, $testname);
 
 # ===================================
