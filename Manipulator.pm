@@ -3,7 +3,7 @@ use strict;
 
 package HTML::Manipulator;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 
 sub replace{
@@ -276,7 +276,7 @@ It can query and replace the content or attributes of any HTML tag.
 The advertised usage pattern is to update static HTML files. 
 
 
-=head2 ANOTHER TEMPLATE ENGINE ?
+=head2 ANOTHER TEMPLATE ENGINE ? NO !
 
 HTML::Manipulator is NOT yet another templating module.
 There are, for example, no template files. It works on normal HTML files
@@ -416,6 +416,17 @@ data for all elements with IDs.
     my $content = HTML::Manipulator::extract_all_content
         ($html, 'one', 'two', 'three');
 
+=head3 Find out all element IDs
+
+You can query for a list of all element IDs and their tag type.
+
+	$data = HTML::Manipulator::extract_all_ids($before);
+
+This returns a hashref where the element IDs of the document
+are they keys. The associated value is the type of the 
+element (the tag type, such as div, span, a), which
+is returned as lowercase.
+	
 =head2 USING FILEHANDLES
 
 You can also call all of the above functions with a file handle instead of the
@@ -430,18 +441,55 @@ will read from the file.
   close IN;
 
 HTML::Manipulator will only read from the file handles you give it.
-It does not change them.
+It does not change them. Nor does it open them,
+you have to have done that yourself. Or you can
+use L<HTML::Manipulator::Document>, which does
+open files.
+
 
 =head2 EXPORT
 
 The module exports none of its functions.
 You have to prefix the full module name to use them.
 
+If you want an object-oriented interface instead,
+consider L<HTML::Manipulator::Document>.
+
 
 =head1 SEE ALSO
 
-Like I said before, this is not a templating module. If you want one of those
-take a look at
+=head2 Processing HTML documents
+
+HTML::Manipulator uses L<HTML::Parser> for parsing the input file. 
+If you find yourself in the unfortunate situation of having to process HTML, have a look
+at that module, too. 
+
+For specific purposes there are also some other modules to work with, for example
+
+=over
+
+=item *
+
+L<HTML::HeadParser> extracts info from the <head> section
+
+
+=item *
+
+L<HTML::LinkExtor> and L<HTML::LinkExtractor> extract links
+
+=item *
+
+L<HTML::FillInForm> populates HTML forms with data
+
+
+=back
+
+
+=head2 Producing HTML output (templating engines)
+
+HTML::Manipulator is not a templating engine. 
+You should not use it to produce output for your CGI script.
+If you want to do that, take a look at
 
 =over
 
@@ -451,7 +499,7 @@ L<HTML::Template> (personal favorite)
 
 =item *
 
-L<TemplateToolkit> (also very popular)
+L<Template> Toolkit (also very popular)
 
 =item *
 
@@ -459,8 +507,7 @@ L<Petal> (innovative, uses attributes rather than tags for markup)
 
 =back
 
-HTML::Manipulator uses L<HTML::Parser> for parsing the input file. If you find yourself in the unfortunate situation of having to process HTML, have a look
-at that module, too.
+
 
 
 =head1 BUGS
