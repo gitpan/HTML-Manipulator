@@ -1,5 +1,8 @@
 Revision history for Perl extension HTML::Manipulator.
 
+0.05  Thu Jun 17 2004
+	- added support for regular expressions in extract_all, extract_all_content and extract_all_ids
+
 0.04  Mon May 31 2004
 	- added replace_title and extract_title
 	- added HTML::Maninpulator::Document->save_as

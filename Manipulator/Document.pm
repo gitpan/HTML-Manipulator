@@ -3,7 +3,7 @@ use HTML::Manipulator;
 
 package HTML::Manipulator::Document;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use Carp;
 
@@ -105,7 +105,7 @@ __END__
 
 =head1 NAME
 
-HTML::Manipulator::Document - object-oriented interface to HTML::Manipulator
+HTML::Manipulator::Document - object-oriented interface to HTML::Manipulator (with some added features)
 
 =head1 SYNOPSIS
 

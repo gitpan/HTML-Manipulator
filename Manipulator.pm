@@ -3,7 +3,7 @@ use strict;
 
 package HTML::Manipulator;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 
 sub replace{
@@ -50,7 +50,16 @@ sub extract_all{
     if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
         $html = join '', <$html>;
     }
-    @ids = keys %{extract_all_ids($html)} unless @ids;
+    if (@ids){
+	    foreach (@ids){
+		    if (ref $_ eq 'Regexp'){
+			    @ids = keys %{extract_all_ids($html, @ids)};
+				    last;
+		    }
+	    }
+    }else{
+	    @ids = keys %{extract_all_ids($html)};
+    }
     return {} unless @ids;
     my %result;
       while (@ids){
@@ -77,8 +86,8 @@ sub extract_all_content{
 }
 
 sub extract_all_ids{
-    my ($html) = @_;
-    my $parser = new HTML::Manipulator::IDExtractor();
+    my ($html, @filter) = @_;
+    my $parser = new HTML::Manipulator::IDExtractor(@filter);
     if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
           $parser->parse_file($html);
     }
@@ -246,7 +255,20 @@ use base qw(HTML::Parser);
 
 sub start_handler{
     my ($self, $type, $attr) = @_;
-    $self->{_found}{$attr->{id}} = $type if exists  $attr->{id};
+    my $id = $attr->{id};
+    return unless defined $id;
+    if ($self->{_filter}){
+	    foreach (@{$self->{_filter}}){
+		    if (ref $_ eq 'Regexp' && $id =~ $_){
+			    $self->{_found}{$id} = $type; return;
+		    }
+		    if (not ref $_ and $_ eq $id){
+			    $self->{_found}{$id} = $type; return;
+		    }
+	    }
+    }else{    
+	    $self->{_found}{$id} = $type;
+    }
 }
 
 sub new{
@@ -254,7 +276,7 @@ sub new{
     my $self= HTML::Parser::new ( $class,
         start_h => ['start_handler', "self, tagname, attr"],
     );
-    
+    $self->{_filter} = [ @args ] if @args;
     return $self;
 }
 
@@ -537,17 +559,30 @@ data for all elements with IDs.
 
     my $content = HTML::Manipulator::extract_all_content
         ($html, 'one', 'two', 'three');
+	
+You can also mix in regular expressions. Any elements with IDs that match
+will be returned. This way you can also achieve case-insensitivity with IDs.
+
+     my $content = HTML::Manipulator::extract_all_content
+        ($html, qr/^...$/i, 'two', qr/^some.*/);
 
 =head3 Find out all element IDs
 
 You can query for a list of all element IDs and their tag type.
 
-	$data = HTML::Manipulator::extract_all_ids($before);
+	$data = HTML::Manipulator::extract_all_ids($html);
 
 This returns a hashref where the element IDs of the document
 are they keys. The associated value is the type of the 
 element (the tag type, such as div, span, a), which
 is returned as lowercase.
+
+You can filter this in the same way as with the extract_all_content
+function above:
+
+	$data = HTML::Manipulator::extract_all_ids($html, 
+	    qr/^...$/i, 'two', qr/^some.*/);
+
 
 =head3 Find out the document title
 

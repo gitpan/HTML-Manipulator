@@ -4,7 +4,7 @@
 #########################
 
 use strict;
-use Test::More tests => 15;
+use Test::More tests => 17;
 BEGIN { use_ok('HTML::Manipulator') };
 
 #########################
@@ -282,7 +282,46 @@ HTML
 is ( HTML::Manipulator::replace_title($before, $testname),
 	$after, $testname);
 	
+# ===================================
+
+$testname = 'extract some element IDs using regular expressions';
+
+$before = <<HTML;
+<html>
+<body>
+<div id=one>
+<div id=two>
+<a href='link' id=link>link</a><b>text<i>yyy</b>
+</div>
+blah blah blah
+</div>
+</body>
+</html>
+HTML
 
 
+$data = HTML::Manipulator::extract_all_ids($before, qr/LINK/i, qr/no match/, 'one');
 
 
+ok ( (ref $data 
+       and (delete $data->{link} eq 'a')
+        and (delete $data->{one} eq 'div')
+          and not keys %$data
+       ) 
+    , $testname);
+
+
+# ===================================
+$testname = 'extract some elements matched by regular expressions';
+
+$data = HTML::Manipulator::extract_all_content($before, qr/o../, qr/LINK/i);
+
+$two = "\n<a href='link' id=link>link</a><b>text<i>yyy</b>\n";
+$one= "\n<div id=two>$two</div>\nblah blah blah\n";
+
+ok ( (ref $data 
+       and (delete $data->{link} eq 'link')
+       and (delete $data->{one} eq $one)
+    and not keys %$data
+       ) 
+    , $testname);
