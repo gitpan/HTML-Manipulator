@@ -4,13 +4,13 @@
 #########################
 
 use strict;
-use Test::More tests => 17;
+use Test::More tests => 22;
 BEGIN { use_ok('HTML::Manipulator') };
 
 #########################
 
 my ($before, $after, $testname, $data, $one, $two, $link);
-
+my (@list);
 
 # ===================================
 
@@ -132,6 +132,7 @@ $before = <<HTML;
 <html>
 <body>
 <div id=one>
+<!-- a comment -->
 <div id=two>
 <a href='link' id=link>link</a><b>text<i>yyy</b>
 </div>
@@ -197,7 +198,7 @@ $testname = 'extract the content of all IDs';
 $data = HTML::Manipulator::extract_all_content($before);
 
 $two = "\n<a href='link' id=link>link</a><b>text<i>yyy</b>\n";
-$one= "\n<div id=two>$two</div>\nblah blah blah\n";
+$one= "\n<!-- a comment -->\n<div id=two>$two</div>\nblah blah blah\n";
 
 #is( delete ($data->{link}) , 'link', $testname);
 #is( delete ($data->{two}) , $two, $testname);
@@ -325,3 +326,66 @@ ok ( (ref $data
     and not keys %$data
        ) 
     , $testname);
+    
+# ===================================
+$testname = 'extract a section marked by comments';
+
+$two = 'This region is editable';
+$one = "<b id=check>$two</b>";
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" -->$one<!-- #EndEditable -->
+</p>
+<!-- another comment -->
+HTML
+
+$data = HTML::Manipulator::extract_content($before, '<!-- #BeginEditable "content" -->');
+is ($data, $one, $testname);
+
+# ===================================
+$testname = 'extract a section marked by comments with nesting';
+
+
+$data = HTML::Manipulator::extract_all_content($before, '<!--#BEGINEDITABLE"content"-->','test', 'check');
+
+ok ( (ref $data 
+       and (delete $data->{test} eq qq{\n<!-- #BeginEditable "content" -->$one<!-- #EndEditable -->\n})
+        and (delete $data->{check} eq $two)
+       and (delete $data->{'<!--#BEGINEDITABLE"content"-->'} eq $one)
+    and not keys %$data
+       ) 
+    , $testname);
+
+    
+# ===================================
+$testname = 'extract all comments';
+
+@list= HTML::Manipulator::extract_all_comments($before);
+
+ok (
+	(($list[0] eq '<!-- #BeginEditable "content" -->')
+	and ($list[1] eq '<!-- #EndEditable -->')
+	and ($list[2] eq '<!-- another comment -->')
+	and @list == 3),
+	$testname);
+	
+# ===================================
+$testname = 'extract all comments (with filter)';
+
+@list = HTML::Manipulator::extract_all_comments($before, '#BEGINEDITABLE "CONTENT"', qr/Another/i);
+
+ok ((($list[0] eq '<!-- #BeginEditable "content" -->')
+	and ($list[1] eq '<!-- another comment -->')
+	and @list == 2),
+	$testname);
+	
+
+# ===================================
+$testname = 'replace a section marked by comments';
+
+$after = $before;
+$after =~ s/$one/$testname/;
+$data = HTML::Manipulator::replace($before, '<!-- #BeginEditable "content" -->' => $testname);
+is ($data, $after, $testname);
+
+

@@ -1,4 +1,4 @@
-HTML::Manipulator version 0.05
+HTML::Manipulator version 0.06
 ==============================
 
 This module manipulates of the contents of HTML files.
@@ -7,7 +7,7 @@ It can query and replace the content or attributes of any HTML tag.
 HTML::Manipulator is NOT yet another templating module.
 There are, for example, no template files. It works on normal HTML files
 without any special markup (you only have to give element IDs to tags you are
-interested in). 
+interested in, or wrap them in comments). 
 
 The advertised usage pattern of HTML::Manipulator is to update
 static HTML files. 

@@ -3,7 +3,7 @@ use HTML::Manipulator;
 
 package HTML::Manipulator::Document;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use Carp;
 
@@ -82,6 +82,11 @@ sub extract_all_ids{
 sub extract_title{
 	my ($self) = @_;
 	HTML::Manipulator::extract_title($self->{html});
+}
+
+sub extract_all_comments{
+	my ($self, @filter) = @_;
+	HTML::Manipulator::extract_all_comments($self->{html}, @filter);
 }
 
 sub save_as{

@@ -1,7 +1,7 @@
 #########################
 
 use strict;
-use Test::More tests => 12;
+use Test::More tests => 13;
 BEGIN { use_ok('HTML::Manipulator::Document') };
 
 #########################
@@ -195,4 +195,18 @@ ok ( -e $one, $testname);
 unlink $one;
 rmdir File::Spec->catfile(File::Spec->tmpdir, 'htmlmanipulator');
 
+# ===================================
+$testname = 'method extract_all_comments';
+
+$two = 'This region is editable';
+$one = "<b id=check>$two</b>";
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" -->$one<!-- #EndEditable -->
+</p>
+<!-- another comment -->
+HTML
+
+$obj = HTML::Manipulator::Document->from_string($before);
+is (scalar $obj->extract_all_comments(), 3, $testname);
 

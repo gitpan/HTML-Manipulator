@@ -3,11 +3,23 @@ use strict;
 
 package HTML::Manipulator;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 
 sub replace{
     my ($html, %data) = @_;
+    # make comment "id" insensitive
+    my @keys = keys %data;
+    foreach (@keys){
+	    my $old = $_;
+	    if (/^<!--/) { 
+		    s/\s//g; 
+		    $_ = lc $_;
+		    if ($old ne $_){
+			    $data{$_} =  delete $data{$old} ;
+		    }
+	    }
+    }
     my $parser = new HTML::Manipulator::Replacer( 
         \%data );
     if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
@@ -50,20 +62,31 @@ sub extract_all{
     if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
         $html = join '', <$html>;
     }
+    my %comment_id_map;
     if (@ids){
 	    foreach (@ids){
+		    my $old = $_;
+		    if (not ref $_ and $_ =~ /^<!--/) { 
+		    	s/\s//g; 
+			$_ = lc $_;
+			$comment_id_map{$_} = $old if $old ne $_;
+		    }
+	    }
+	    foreach (@ids){
 		    if (ref $_ eq 'Regexp'){
-			    @ids = keys %{extract_all_ids($html, @ids)};
-				    last;
+			    @ids = 
+			    	keys %{extract_all_ids($html, @ids)} ;
+			    last;
 		    }
 	    }
     }else{
 	    @ids = keys %{extract_all_ids($html)};
     }
     return {} unless @ids;
+   
     my %result;
       while (@ids){
-        my $parser = new HTML::Manipulator::Extractor(@ids);
+	  my $parser = new HTML::Manipulator::Extractor(@ids);
               
         $parser->parse($html);
         $parser->eof;
@@ -75,6 +98,11 @@ sub extract_all{
             @ids = ();
         }
     }
+    # fix comment ids
+    foreach (keys %comment_id_map){
+	    $result{$comment_id_map{$_}} = $result{$_};
+	    delete $result{$_};
+    }
     return \%result;
 }
 
@@ -82,6 +110,8 @@ sub extract_all_content{
     my ($html, @ids) = @_;
     my $result = extract_all($html, @ids);
     return {} unless ref $result;
+    use Data::Dumper;
+   # warn Dumper $result;
     return { map { ( $_ => $result->{$_}{_content} ) } keys %$result };
 }
 
@@ -109,6 +139,20 @@ sub extract_title{
         $parser->eof;
     }
     return $parser->{_found};
+}
+
+sub extract_all_comments{
+	my ($html, @filter) = @_;
+	my @result;
+	my  $parser = new HTML::Manipulator::CommentExtractor(@filter);
+	if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
+		$parser->parse_file($html);
+	}
+	else{
+		$parser->parse($html);
+		$parser->eof;
+	}
+	return @{$parser->{_found}};
 }
 
 package HTML::Manipulator::Replacer;
@@ -181,13 +225,37 @@ sub end_document_handler{
 }
 
 
+sub comment_handler{
+	my ($self, $text, $skip) = @_;
+	if (exists $self->{_watch_for}){
+		if ($self->{_watch_for} eq '<!--'){
+			delete $self->{_watch_for};
+			$self->{_collect} .=  $text;
+		}
+		return;
+	}
+	
+	my $id = lc $text;
+	$id =~ s/\s//g;
+	
+	 
+	$self->{_collect} .=  $skip;
+	$self->{_collect} .=  $text;
+	unless ($id and exists $self->{_update_ids}{$id}){
+		return;
+	}
+	$self->{_collect} .= $self->{_update_ids}{$id};
+	$self->{_watch_for} = '<!--';
+}
+
 
 sub new{
     my ($class, $args) = @_;
     my $self= HTML::Parser::new ( $class,
         start_h => ['start_handler', "self,tagname, attr, text, skipped_text"],
         end_h => ['end_handler', "self,tagname, text, skipped_text"],
-        end_document_h =>['end_document_handler', "self, skipped_text"],,
+        end_document_h =>['end_document_handler', "self, skipped_text"],
+	comment_h => ['comment_handler',  'self, text, skipped_text'],
     );
     
     $self->{_update_ids} = $args;
@@ -236,15 +304,46 @@ sub end_handler{
     delete $self->{_watch_for};
 }
 
+sub comment_handler{
+    my ($self,  $text, $skip) = @_;
+    
+    my $id = lc $text;
+    $id =~ s/\s//g;
+    
+    #warn "comment [$id] \n";
+    
+    if (exists $self->{_watch_for}){
+	    if ($self->{_watch_for_id} =~ /^<!--/){
+		    $self->{_found}{$self->{_watch_for_id}}{_content} .= $skip;
+		    $self->{_found}{$self->{_watch_for_id}}{_end_tag} = $text;
+		    delete $self->{_watch_for};
+		   return;
+	    }
+	     $self->{_found}{$self->{_watch_for_id}}{_content} .= $skip.$text;
+	 return;
+    }
+    
+    unless (exists $self->{_extract_ids}{$id}){
+        return;
+    }
+    $self->{_found}{$id} = {};
+    $self->{_found}{$id}{_start_tag} = $text;
+    $self->{_watch_for_id} = $id;
+    $self->{_watch_for} = $id;
+    #warn "watching for $id";
+}
+
+
 
 sub new{
     my ($class, @args) = @_;
     my $self= HTML::Parser::new ( $class,
         start_h => ['start_handler', "self,tagname, attr, text, skipped_text"],
         end_h => ['end_handler', "self,tagname, text, skipped_text"],
-    );
+	comment_h => ['comment_handler',  'self, text, skipped_text'],
+	);
     
-    my %args = map {( $_ => 1)} @args;
+	my %args = map { ($_ => 1)} @args;
     $self->{_extract_ids} = \%args;
     
     return $self;
@@ -364,7 +463,35 @@ sub new{
     return $self;
 }
 
+package HTML::Manipulator::CommentExtractor;
+use base qw(HTML::Parser);
 
+sub comment_handler{
+    my ($self, $text, $token0) = @_;
+    if ($self->{_filter}){
+	    my $id = lc $token0;
+	    $id =~ s/\s//g;
+	    foreach (@{$self->{_filter}}){
+		    if (ref $_ eq 'Regexp' && $id =~ $_){
+			    push  @{$self->{_found}}, $text ; return;
+		    }
+		    if (not ref $_ and $_ eq $id){
+			    push  @{$self->{_found}}, $text ; return;
+		    }
+	    }
+    }else{    
+	  push  @{$self->{_found}}, $text ; return;
+    }
+}
+
+sub new{
+    my ($class, @args) = @_;
+    my $self= HTML::Parser::new ( $class,
+        comment_h => ['comment_handler', "self,text,token0"],
+    );
+    $self->{_filter} = [ map { unless (ref){ $_ = lc $_; s/\s//g;}; $_;} @args ] if @args;
+    return $self;
+}
 
 1;
 __END__
@@ -412,7 +539,7 @@ The advertised usage pattern is to update static HTML files.
 HTML::Manipulator is NOT yet another templating module.
 There are, for example, no template files. It works on normal HTML files
 without any special markup (you only have to give element IDs to tags you are
-interested in). 
+interested in, or wrap them in comments). 
 
 While you could probably use this module for
 producing your web application's output, DON'T.
@@ -423,13 +550,19 @@ L<HTML::Template> instead.
 
 =head2 ABOUT THE INPUT HTML FILES
 
-HTML::Manipulator is meant to work on real-life HTML files (in all their non-standards-compliant ugliness). It uses the HTML::Parser module to find
+HTML::Manipulator is meant to work on real-life HTML files (in all their non-standards-compliant ugliness).
+It uses the HTML::Parser module to find
 elements (tags) inside those files, which you can then replace or modify.
 All you have to do is give those elements a DOM ID, for example
 
     <h3 id=headline77>Headline</h3>
     
 No other markup is necessary.
+
+As an alternative to element ID, HTML::Manipulator can also identify sections enclosed
+in HTML comments.
+
+    <h3><!-- headline77 -->Headline<!-- --></h3>
 
 =head3 Malformed HTML (is fine)
 
@@ -453,7 +586,8 @@ and
 are treated as identical. 
 
 However, HTML::Manipulator respects
-case when comparing the IDs of elements (not sure about the HTML standard here), so that you could NOT address above h3 element as HeadLine77.
+case when comparing the IDs of elements (not sure about the HTML standard here), 
+so that you could NOT address above h3 element as HeadLine77.
 
 When HTML::Manipulator has to rewrite tags (this happens
 when you ask it to change element attributes) it will output
@@ -461,6 +595,8 @@ the tag and attribute names as lower-case. It will also
 rearrange their order. When changing only
 the content of an element, it preserves the original opening and
 closing tags.
+
+When matching HTML comments (see below), case and whitespace are ignored.
 
 =head2 FUNCTIONS TO CHANGE CONTENT
 
@@ -587,6 +723,70 @@ function above:
 =head3 Find out the document title
 
 	my $title = HTML::Manipulator::extract_title($html);
+
+
+=head2 USING HTML COMMENTS INSTEAD OF ELEMENT ID
+
+Instead of (or in addition to) using a DOM element ID to identify the section of the document
+you want to work on, you can also enclose that section in HTML comments. This approach
+is used by many software packages, for example Dreamweaver. 
+
+=head3 extracting content
+
+   <!-- start description --> blah blah blah <!-- end -->
+
+If you have HTML like above, you can get the section enclosed by the two comments using
+the same extraction functions as with element ID. Instead of an ID, you just use the opening
+comment tag:
+
+   my $content = HTML::Manipulator::extract_content($html, '<!-- start description -->');
+   
+There are some caveats:
+
+=over
+
+=item *
+
+The section starts with the comment tag you used in lieu of an element ID.
+It ends with the first subsequent comment tag, no matter how that tag looks like.
+This means that the enclosed section cannot contain HTML comments itself.
+
+=item *
+
+When matching the opening comment tag, all whitespace and case is ignored.
+'<!-- start description -->' and '<!--STARTDESCRIPTION-->' are the same thing
+
+=item *
+
+When using extract_all_content or extract_all without any parameters, the 
+functions return the content of all elements with an ID. They do not return
+any sections marked up by comments (because it is impossible to figure out
+if a given HTML comment is supposed to mark a section in that manner without
+more information). If you want to get comment-enclosed sections, you have to
+explicitly name them. You also cannot use regular expressions 
+directly in the extract_* functions like you could to match an ID.
+
+You can query the document for all comments that have a certain form by using
+another function (extract_all_comments) and use the results of this function
+to specify what you need in extract_all_content.
+
+  my @array = HTML::Manipulator::extract_all_comments($html,
+  	qr/START/i);
+
+This will give you something like:
+   ( '<!-- start description -->', '<!-- start footer -->').
+
+=back
+
+=head3 replacing content
+
+You can use the replace() function with the opening
+comment tag instead of an element ID:
+
+    my $new = HTML::Manipulator::replace($html, 
+    	'<!-- title -->' => 'New news');
+
+
 
 
 =head2 USING FILEHANDLES
