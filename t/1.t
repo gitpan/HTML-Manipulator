@@ -4,7 +4,7 @@
 #########################
 
 use strict;
-use Test::More tests => 22;
+use Test::More tests => 40;
 BEGIN { use_ok('HTML::Manipulator') };
 
 #########################
@@ -40,6 +40,105 @@ is ( HTML::Manipulator::replace($before,
 
 # ===================================
 
+$testname = 'remove a simple div without nested tags';
+
+
+$after = <<HTML;
+<html>
+<body>
+
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::remove($before, 
+   qw[ simple ]
+), $after, $testname);
+
+
+# ===================================
+
+$testname = 'insert_before_begin with a simple div without nested tags';
+
+
+$after = <<HTML;
+<html>
+<body>
+$testname<div id=simple>
+XXXXXXX
+</div>
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_before_begin($before, 
+   simple => $testname
+), $after, $testname);
+
+# ===================================
+
+$testname = 'insert_after_end with a simple div without nested tags';
+
+
+$after = <<HTML;
+<html>
+<body>
+<div id=simple>
+XXXXXXX
+</div>$testname
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_after_end($before, 
+   simple => $testname
+), $after, $testname);
+
+# ===================================
+
+$testname = 'insert_before_end with a simple div without nested tags';
+
+
+$after = <<HTML;
+<html>
+<body>
+<div id=simple>
+XXXXXXX
+$testname</div>
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_before_end($before, 
+   simple => $testname
+), $after, $testname);
+
+# ===================================
+
+$testname = 'insert_after_begin with a simple div without nested tags';
+
+
+$after = <<HTML;
+<html>
+<body>
+<div id=simple>$testname
+XXXXXXX
+</div>
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_after_begin($before, 
+   simple => $testname
+), $after, $testname);
+
+
+
+
+
+
+# ===================================
+
 $testname = 'replace a div with nested tags (but no divs) and uppercase tags';
 
 $before = <<HTML;
@@ -63,6 +162,25 @@ HTML
 is ( HTML::Manipulator::replace( uc $before, 
     SIMPLE =>  uc $testname
 ),  uc $after, $testname);
+
+
+# ===================================
+
+$testname = 'remove a div with nested tags (but no divs) and uppercase tags';
+
+
+$after = <<HTML;
+<html>
+<body>
+
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::remove( uc $before, 
+    qw[ SIMPLE ]
+),  uc($after), $testname);
+
 
 # ===================================
 
@@ -123,6 +241,121 @@ is ( HTML::Manipulator::replace($before,
     one => $testname,
     two => $testname.$testname
 ), $after, $testname);
+
+
+# ===================================
+
+$testname = 'remove two divs and a nested link';
+
+
+$after = <<HTML;
+<html>
+<body>
+
+
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::remove($before, 
+   qw[ link one two ]
+), $after, $testname);
+
+
+
+# ===================================
+
+$testname = 'insert_before_begin with two divs and a nested link';
+
+
+$after = <<HTML;
+<html>
+<body>
+$testname one<div id=one>
+$testname link<a href='link' id=link>link</a><b>text<i>yyy</b>
+</div>
+$testname two<div id=two>
+<a href='link' id=link>link</a><b>text<i>yyy</b>
+</div>
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_before_begin($before, 
+   link => "$testname link",  one => "$testname one",  
+   two => "$testname two" 
+), $after, $testname);
+
+# ===================================
+
+$testname = 'insert_after_end with two divs and a nested link';
+
+
+$after = <<HTML;
+<html>
+<body>
+<div id=one>
+<a href='link' id=link>link</a>$testname link<b>text<i>yyy</b>
+</div>$testname one
+<div id=two>
+<a href='link' id=link>link</a><b>text<i>yyy</b>
+</div>$testname two
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_after_end($before, 
+   link => "$testname link",  one => "$testname one",  
+   two => "$testname two" 
+), $after, $testname);
+
+# ===================================
+
+$testname = 'insert_before_end with two divs and a nested link';
+
+
+$after = <<HTML;
+<html>
+<body>
+<div id=one>
+<a href='link' id=link>link$testname link</a><b>text<i>yyy</b>
+$testname one</div>
+<div id=two>
+<a href='link' id=link>link</a><b>text<i>yyy</b>
+$testname two</div>
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_before_end($before, 
+   link => "$testname link",  one => "$testname one",  
+   two => "$testname two" 
+), $after, $testname);
+
+# ===================================
+
+$testname = 'insert_after_begin with two divs and a nested link';
+
+
+$after = <<HTML;
+<html>
+<body>
+<div id=one>$testname one
+<a href='link' id=link>$testname linklink</a><b>text<i>yyy</b>
+</div>
+<div id=two>$testname two
+<a href='link' id=link>link</a><b>text<i>yyy</b>
+</div>
+</body>
+</html>
+HTML
+
+is ( HTML::Manipulator::insert_after_begin($before, 
+   link => "$testname link",  one => "$testname one",  
+   two => "$testname two" 
+), $after, $testname);
+
+
 
 # ===================================
 
@@ -387,5 +620,184 @@ $after = $before;
 $after =~ s/$one/$testname/;
 $data = HTML::Manipulator::replace($before, '<!-- #BeginEditable "content" -->' => $testname);
 is ($data, $after, $testname);
+
+# ===================================
+$testname = 'remove a section marked by comments';
+
+$after = <<HTML;
+<p id=test>
+
+</p>
+<!-- another comment -->
+HTML
+$data = HTML::Manipulator::remove($before, '<!-- #BeginEditable "content" -->');
+is ($data, $after, $testname);
+
+# ===================================
+$testname = 'insert_before_begin with a section marked by comments and a nested div';
+
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" --><p>blah</p>
+<div id='nested'><i>$testname</i></div><!-- #EndEditable -->
+</p>
+<!-- another comment -->
+<div id='three'>hey</div>
+HTML
+
+
+$after = <<HTML;
+<p id=test>
+ONE<!-- #BeginEditable "content" --><p>blah</p>
+TWO<div id='nested'><i>$testname</i></div><!-- #EndEditable -->
+</p>
+<!-- another comment -->
+THREE<div id='three'>hey</div>
+HTML
+$data = HTML::Manipulator::insert_before_begin(
+	$before, '<!-- #BeginEditable "content" -->' => 'ONE', 
+		nested => 'TWO', three => 'THREE');
+	
+is ($data, $after, $testname);
+
+# ===================================
+$testname = 'insert_after_end with a section marked by comments and a nested div';
+
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" --><p>blah</p>
+<div id='nested'><i>$testname</i></div><!-- #EndEditable -->
+</p>
+<!-- another comment -->
+<div id='three'>hey</div>
+HTML
+
+
+$after = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" --><p>blah</p>
+<div id='nested'><i>$testname</i></div>TWO<!-- #EndEditable -->ONE
+</p>
+<!-- another comment -->
+<div id='three'>hey</div>THREE
+HTML
+$data = HTML::Manipulator::insert_after_end(
+	$before, '<!-- #BeginEditable "content" -->' => 'ONE', 
+		nested => 'TWO', three => 'THREE');
+	
+is ($data, $after, $testname);
+
+# ===================================
+$testname = 'insert_before_end with a section marked by comments and a nested div';
+
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" --><p>blah</p>
+<div id='nested'><i>$testname</i></div><!-- #EndEditable -->
+</p>
+<!-- another comment -->
+<div id='three'>hey</div>
+HTML
+
+
+$after = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" --><p>blah</p>
+<div id='nested'><i>$testname</i>TWO</div>ONE<!-- #EndEditable -->
+</p>
+<!-- another comment -->
+<div id='three'>heyTHREE</div>
+HTML
+$data = HTML::Manipulator::insert_before_end(
+	$before, '<!-- #BeginEditable "content" -->' => 'ONE', 
+		nested => 'TWO', three => 'THREE');
+	
+is ($data, $after, $testname);
+
+# ===================================
+$testname = 'insert_before_end with a section marked by comments';
+
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" -->$one<!-- #EndEditable -->
+</p>
+<!-- another comment -->
+HTML
+
+$after = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" -->${one}BEFORE_END<!-- #EndEditable -->
+BEFORE_END</p>
+<!-- another comment -->
+HTML
+
+$data = HTML::Manipulator::insert_before_end($before, 
+    test=>'BEFORE_END', 
+	'<!-- #BeginEditable "CONtent"    -->' => 'BEFORE_END'
+);
+	
+is ($data, $after, $testname);
+
+
+# ===================================
+$testname = 'insert_after_begin with a section marked by comments and a nested div';
+
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" --><p>blah</p>
+<div id='nested'><i>$testname</i></div><!-- #EndEditable -->
+</p>
+<!-- another comment -->
+<div id='three'>hey</div>
+HTML
+
+
+$after = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" -->ONE<p>blah</p>
+<div id='nested'>TWO<i>$testname</i></div><!-- #EndEditable -->
+</p>
+<!-- another comment -->
+<div id='three'>THREEhey</div>
+HTML
+$data = HTML::Manipulator::insert_after_begin(
+	$before, '<!-- #BeginEditable "content" -->' => 'ONE', 
+		nested => 'TWO', three => 'THREE');
+	
+is ($data, $after, $testname);
+
+# ===================================
+$testname = 'insert adjacent';
+
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" -->$one<!-- #EndEditable -->
+</p>
+<!-- another comment -->
+HTML
+
+$after = <<HTML;
+BEFORE_BEGIN<p id=test>AFTER_BEGIN
+BEFORE_BEGIN<!-- #BeginEditable "content" -->AFTER_BEGIN${one}BEFORE_END<!-- #EndEditable -->AFTER_END
+BEFORE_END</p>AFTER_END
+<!-- another comment -->
+HTML
+
+$before = HTML::Manipulator::insert_before_begin($before, test=>'BEFORE_BEGIN', 
+	'<!-- #BeginEditable "content"  -->' => 'BEFORE_BEGIN');
+
+$before = HTML::Manipulator::insert_after_begin($before, test=>'AFTER_BEGIN', 
+	'<!-- #BeginEditable "content"-->' => 'AFTER_BEGIN');
+
+$before = HTML::Manipulator::insert_before_end($before, 
+    test=>'BEFORE_END', 
+	'<!-- #BeginEditable "CONtent"    -->' => 'BEFORE_END'
+);
+
+
+is ( HTML::Manipulator::insert_after_end($before, test=>'AFTER_END', 
+	'<!-- #  Begineditable "content"-->' => 'AFTER_END') ,
+	$after, $testname);
+
 
 

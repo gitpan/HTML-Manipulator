@@ -1,7 +1,7 @@
 #########################
 
 use strict;
-use Test::More tests => 13;
+use Test::More tests => 14;
 BEGIN { use_ok('HTML::Manipulator::Document') };
 
 #########################
@@ -209,4 +209,33 @@ HTML
 
 $obj = HTML::Manipulator::Document->from_string($before);
 is (scalar $obj->extract_all_comments(), 3, $testname);
+
+
+# ===================================
+$testname = 'insert adjacent';
+
+$before = <<HTML;
+<p id=test>
+<!-- #BeginEditable "content" -->$one<!-- #EndEditable -->
+</p>
+<!-- another comment -->
+HTML
+
+$after = <<HTML;
+BEFORE_BEGIN<p id=test>AFTER_BEGIN
+BEFORE_BEGIN<!-- #BeginEditable "content" -->AFTER_BEGIN${one}BEFORE_END<!-- #EndEditable -->AFTER_END
+BEFORE_END</p>AFTER_END
+<!-- another comment -->
+HTML
+
+$obj = HTML::Manipulator::Document->from_string($before);
+$obj->insert_before_begin( test=>'BEFORE_BEGIN', 
+	'<!-- #BeginEditable "content"-->' => 'BEFORE_BEGIN');
+$obj->insert_after_begin( test=>'AFTER_BEGIN', 
+	'<!-- #BeginEditable "content"-->' => 'AFTER_BEGIN');
+$obj->insert_before_end( test=>'BEFORE_END', 
+	'<!-- #BeginEditable "content"-->' => 'BEFORE_END');
+is ( $obj->insert_after_end( test=>'AFTER_END', 
+	'<!-- #BeginEditable "content"-->' => 'AFTER_END') ,
+	$after, $testname);
 

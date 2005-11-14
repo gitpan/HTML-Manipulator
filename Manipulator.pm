@@ -1,463 +1,544 @@
-use 5.008;
 use strict;
 
 package HTML::Manipulator;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
+sub replace {
+    my ( $html, %data ) = @_;
 
-sub replace{
-    my ($html, %data) = @_;
     # make comment "id" insensitive
     my @keys = keys %data;
-    foreach (@keys){
-	    my $old = $_;
-	    if (/^<!--/) { 
-		    s/\s//g; 
-		    $_ = lc $_;
-		    if ($old ne $_){
-			    $data{$_} =  delete $data{$old} ;
-		    }
-	    }
+    foreach (@keys) {
+        my $old = $_;
+        if (/^<!--/) {
+            s/\s//g;
+            $_ = lc $_;
+            if ( $old ne $_ ) {
+                $data{$_} = delete $data{$old};
+            }
+        }
     }
-    my $parser = new HTML::Manipulator::Replacer( 
-        \%data );
-    if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
-          $parser->parse_file($html);
-    }
-    else{
+    my $parser = new HTML::Manipulator::Replacer( \%data );
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
+        $parser->parse_file($html);
+    } else {
         $parser->parse($html);
         $parser->eof;
     }
     return $parser->{_collect};
 }
 
-sub replace_title{
-    my ($html, $title) = @_;
-    my $parser = new HTML::Manipulator::TitleReplacer( $title);
-    if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
-          $parser->parse_file($html);
+sub remove {
+    my ( $html, @ids ) = @_;
+
+    # make comment "id" insensitive
+    foreach (@ids) {
+        if (/^<!--/) {
+            s/\s//g;
+            $_ = lc $_;
+        }
     }
-    else{
+    my $parser = new HTML::Manipulator::Remover(@ids);
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
+        $parser->parse_file($html);
+    } else {
+        $parser->parse($html);
+        $parser->eof;
+    }
+
+    return $parser->{_collect};
+}
+
+sub insert_adjacent {
+    my ( $html, %data ) = @_;
+
+    # slurp (because this will be multi-pass
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
+        $html = join '', <$html>;
+    }
+
+    # make comment "id" insensitive
+    my %keys;
+    my @parts = values %data;
+    foreach (@parts) {
+        my $h = $_;
+        foreach ( keys %$h ) {
+            my $old = $_;
+            if (/^<!--/) {
+                s/\s//g;
+                $_ = lc $_;
+                if ( $old ne $_ ) {
+                    $h->{$_} = delete $h->{$old};
+                }
+            }
+            $keys{$_} = 1;
+        }
+    }
+
+    my @keys = keys %keys;
+
+    while (@keys) {
+        my $parser = new HTML::Manipulator::Inserter( \%data );
+        $parser->parse($html);
+        $parser->eof;
+        $html = $parser->{_collect};
+        if ( ref $parser->{_found} and keys %{ $parser->{_found} } ) {
+
+            # retry with keys that have not been found
+            @keys = grep { not exists $parser->{_found}{$_} } @keys;
+
+        } else {
+            @keys = ();
+        }
+
+    }
+    return $html;
+}
+
+sub insert_before_begin {
+    my ( $html, %data ) = @_;
+    return insert_adjacent( $html, before_begin => \%data );
+}
+
+sub insert_after_end {
+    my ( $html, %data ) = @_;
+    return insert_adjacent( $html, after_end => \%data );
+}
+
+sub insert_after_begin {
+    my ( $html, %data ) = @_;
+    return insert_adjacent( $html, after_begin => \%data );
+}
+
+sub insert_before_end {
+    my ( $html, %data ) = @_;
+    return insert_adjacent( $html, before_end => \%data );
+}
+
+sub replace_title {
+    my ( $html, $title ) = @_;
+    my $parser = new HTML::Manipulator::TitleReplacer($title);
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
+        $parser->parse_file($html);
+    } else {
         $parser->parse($html);
         $parser->eof;
     }
     return $parser->{_collect};
 }
 
-sub extract{
-    my ($html, $id) = @_;
-    my $result = extract_all($html,$id);
+sub extract {
+    my ( $html, $id ) = @_;
+    my $result = extract_all( $html, $id );
     return ref $result ? $result->{$id} : undef;
 }
 
-sub extract_content{
-    my ($html, $id) = @_;
-    my $result = extract_all_content($html,$id);
+sub extract_content {
+    my ( $html, $id ) = @_;
+    my $result = extract_all_content( $html, $id );
     return ref $result ? $result->{$id} : undef;
 }
 
-sub extract_all{
-    my ($html, @ids) = @_;
-    if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
+sub extract_all {
+    my ( $html, @ids ) = @_;
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
         $html = join '', <$html>;
     }
     my %comment_id_map;
-    if (@ids){
-	    foreach (@ids){
-		    my $old = $_;
-		    if (not ref $_ and $_ =~ /^<!--/) { 
-		    	s/\s//g; 
-			$_ = lc $_;
-			$comment_id_map{$_} = $old if $old ne $_;
-		    }
-	    }
-	    foreach (@ids){
-		    if (ref $_ eq 'Regexp'){
-			    @ids = 
-			    	keys %{extract_all_ids($html, @ids)} ;
-			    last;
-		    }
-	    }
-    }else{
-	    @ids = keys %{extract_all_ids($html)};
+    if (@ids) {
+        foreach (@ids) {
+            my $old = $_;
+            if ( not ref $_ and $_ =~ /^<!--/ ) {
+                s/\s//g;
+                $_ = lc $_;
+                $comment_id_map{$_} = $old if $old ne $_;
+            }
+        }
+        foreach (@ids) {
+            if ( ref $_ eq 'Regexp' ) {
+                @ids =
+                  keys %{ extract_all_ids( $html, @ids ) };
+                last;
+            }
+        }
+    } else {
+        @ids = keys %{ extract_all_ids($html) };
     }
     return {} unless @ids;
-   
+
     my %result;
-      while (@ids){
-	  my $parser = new HTML::Manipulator::Extractor(@ids);
-              
+    while (@ids) {
+        my $parser = new HTML::Manipulator::Extractor(@ids);
+
         $parser->parse($html);
         $parser->eof;
-        if (ref $parser->{_found} and keys %{$parser->{_found}}){
-            %result = (%result, %{$parser->{_found}}) ;
-            @ids = grep {not exists $result{$_}} @ids;
-        }
-        else {
+        if ( ref $parser->{_found} and keys %{ $parser->{_found} } ) {
+            %result = ( %result, %{ $parser->{_found} } );
+            @ids = grep { not exists $result{$_} } @ids;
+        } else {
             @ids = ();
         }
     }
+
     # fix comment ids
-    foreach (keys %comment_id_map){
-	    $result{$comment_id_map{$_}} = $result{$_};
-	    delete $result{$_};
+    foreach ( keys %comment_id_map ) {
+        $result{ $comment_id_map{$_} } = $result{$_};
+        delete $result{$_};
     }
     return \%result;
 }
 
-sub extract_all_content{
-    my ($html, @ids) = @_;
-    my $result = extract_all($html, @ids);
+sub extract_all_content {
+    my ( $html, @ids ) = @_;
+    my $result = extract_all( $html, @ids );
     return {} unless ref $result;
     use Data::Dumper;
-   # warn Dumper $result;
+
+    # warn Dumper $result;
     return { map { ( $_ => $result->{$_}{_content} ) } keys %$result };
 }
 
-sub extract_all_ids{
-    my ($html, @filter) = @_;
+sub extract_all_ids {
+    my ( $html, @filter ) = @_;
     my $parser = new HTML::Manipulator::IDExtractor(@filter);
-    if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
-          $parser->parse_file($html);
-    }
-    else{
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
+        $parser->parse_file($html);
+    } else {
         $parser->parse($html);
         $parser->eof;
     }
-    return $parser->{_found} || {} ;
+    return $parser->{_found} || {};
 }
 
-sub extract_title{
-	my ($html) = @_;
-	my $parser = new HTML::Manipulator::TitleExtractor();
-	 if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
-          $parser->parse_file($html);
-    }
-    else{
+sub extract_title {
+    my ($html) = @_;
+    my $parser = new HTML::Manipulator::TitleExtractor();
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
+        $parser->parse_file($html);
+    } else {
         $parser->parse($html);
         $parser->eof;
     }
     return $parser->{_found};
 }
 
-sub extract_all_comments{
-	my ($html, @filter) = @_;
-	my @result;
-	my  $parser = new HTML::Manipulator::CommentExtractor(@filter);
-	if ( UNIVERSAL::isa($html, 'GLOB') or UNIVERSAL::isa(\$html, 'GLOB') ){
-		$parser->parse_file($html);
-	}
-	else{
-		$parser->parse($html);
-		$parser->eof;
-	}
-	return @{$parser->{_found}};
+sub extract_all_comments {
+    my ( $html, @filter ) = @_;
+    my @result;
+    my $parser = new HTML::Manipulator::CommentExtractor(@filter);
+    if ( UNIVERSAL::isa( $html, 'GLOB' ) or UNIVERSAL::isa( \$html, 'GLOB' ) ) {
+        $parser->parse_file($html);
+    } else {
+        $parser->parse($html);
+        $parser->eof;
+    }
+    return @{ $parser->{_found} };
 }
 
 package HTML::Manipulator::Replacer;
 use base qw(HTML::Parser);
 
-sub start_handler{
-    my ($self, $type, $attr, $text, $skip) = @_;
+sub start_handler {
+    my ( $self, $type, $attr, $text, $skip ) = @_;
     my $id = $attr->{id};
-    if (exists $self->{_watch_for}){
+    if ( exists $self->{_watch_for} ) {
         $self->{_watch_for_depth}++ if $self->{_watch_for} eq $type;
         return;
     }
-     $self->{_collect} .=  $skip;
-    unless ($id and exists $self->{_update_ids}{$id}){
-         $self->{_collect} .=  $text;
+    $self->{_collect} .= $skip;
+    unless ( $id and exists $self->{_update_ids}{$id} ) {
+        $self->{_collect} .= $text;
         return;
     }
     my $content = $self->{_update_ids}{$id};
     my %new_values;
-    if (ref $content){
+    if ( ref $content ) {
         %new_values = %$content;
-        foreach (keys %new_values){
-            if ($_ ne lc $_){
-                 $new_values{lc $_} = delete $new_values{$_};
+        foreach ( keys %new_values ) {
+            if ( $_ ne lc $_ ) {
+                $new_values{ lc $_ } = delete $new_values{$_};
             }
         }
-        
+
         $content = delete $new_values{'_content'};
     }
-    
-    if (%new_values){
-        my %attr = (%$attr, %new_values);
-        $self->{_collect} .=  "<$type";
-        foreach (sort keys %attr){
-            if(index ($attr{$_}, "'") == -1 ){ 
-                 $self->{_collect} .=   qq[ $_='$attr{$_}'];
-            }else{
-                $self->{_collect} .=   qq[ $_="$attr{$_}"];
+
+    if (%new_values) {
+        my %attr = ( %$attr, %new_values );
+        $self->{_collect} .= "<$type";
+        foreach ( sort keys %attr ) {
+            if ( index( $attr{$_}, "'" ) == -1 ) {
+                $self->{_collect} .= qq[ $_='$attr{$_}'];
+            } else {
+                $self->{_collect} .= qq[ $_="$attr{$_}"];
             }
-        } 
-        $self->{_collect} .=  ">";
-    }else{
+        }
+        $self->{_collect} .= ">";
+    } else {
         $self->{_collect} .= $text;
     }
-    if ($content){
+    if ($content) {
         $self->{_watch_for} = $type;
-         $self->{_collect} .=  $content;
+        $self->{_collect} .= $content;
     }
 }
 
-sub end_handler{
-    my ($self, $type, $text, $skip) = @_;
-    unless (exists $self->{_watch_for}) {
-         $self->{_collect} .=  $skip;
-         $self->{_collect} .=  $text;
+sub end_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    unless ( exists $self->{_watch_for} ) {
+        $self->{_collect} .= $skip;
+        $self->{_collect} .= $text;
         return;
     }
-    if ($type eq $self->{_watch_for}){
+    if ( $type eq $self->{_watch_for} ) {
         $self->{_watch_for_depth}--;
-        if ($self->{_watch_for_depth}){
-             $self->{_collect} .=  $text;
+        if ( $self->{_watch_for_depth} ) {
+            $self->{_collect} .= $text;
             delete $self->{_watch_for};
         }
     }
 }
 
-sub end_document_handler{
-    my ($self, $text) = @_;
+sub end_document_handler {
+    my ( $self, $text ) = @_;
     $self->{_collect} .= $text;
 }
 
+sub comment_handler {
+    my ( $self, $text, $skip ) = @_;
+    if ( exists $self->{_watch_for} ) {
+        if ( $self->{_watch_for} eq '<!--' ) {
+            delete $self->{_watch_for};
+            $self->{_collect} .= $text;
+        }
+        return;
+    }
 
-sub comment_handler{
-	my ($self, $text, $skip) = @_;
-	if (exists $self->{_watch_for}){
-		if ($self->{_watch_for} eq '<!--'){
-			delete $self->{_watch_for};
-			$self->{_collect} .=  $text;
-		}
-		return;
-	}
-	
-	my $id = lc $text;
-	$id =~ s/\s//g;
-	
-	 
-	$self->{_collect} .=  $skip;
-	$self->{_collect} .=  $text;
-	unless ($id and exists $self->{_update_ids}{$id}){
-		return;
-	}
-	$self->{_collect} .= $self->{_update_ids}{$id};
-	$self->{_watch_for} = '<!--';
+    my $id = lc $text;
+    $id =~ s/\s//g;
+
+    $self->{_collect} .= $skip;
+    $self->{_collect} .= $text;
+    unless ( $id and exists $self->{_update_ids}{$id} ) {
+        return;
+    }
+    $self->{_collect} .= $self->{_update_ids}{$id};
+    $self->{_watch_for} = '<!--';
 }
 
-
-sub new{
-    my ($class, $args) = @_;
-    my $self= HTML::Parser::new ( $class,
-        start_h => ['start_handler', "self,tagname, attr, text, skipped_text"],
-        end_h => ['end_handler', "self,tagname, text, skipped_text"],
-        end_document_h =>['end_document_handler', "self, skipped_text"],
-	comment_h => ['comment_handler',  'self, text, skipped_text'],
+sub new {
+    my ( $class, $args ) = @_;
+    my $self = HTML::Parser::new(
+        $class,
+        start_h =>
+          [ 'start_handler', "self,tagname, attr, text, skipped_text" ],
+        end_h => [ 'end_handler', "self,tagname, text, skipped_text" ],
+        end_document_h => [ 'end_document_handler', "self, skipped_text" ],
+        comment_h => [ 'comment_handler', 'self, text, skipped_text' ],
     );
-    
+
     $self->{_update_ids} = $args;
-    $self->{_collect} = '';
+    $self->{_collect}    = '';
     return $self;
 }
-
 
 package HTML::Manipulator::Extractor;
 use base qw(HTML::Parser);
 
-sub start_handler{
-    my ($self, $type, $attr, $text, $skip) = @_;
+sub start_handler {
+    my ( $self, $type, $attr, $text, $skip ) = @_;
     my $id = $attr->{id};
-    if (exists $self->{_watch_for}){
-         $self->{_found}{$self->{_watch_for_id}}{_content} .= $skip . $text;
-         $self->{_watch_for_depth}++ if $self->{_watch_for} eq $type;
-         return;
-    }
-    
-    unless ($id and exists $self->{_extract_ids}{$id}){
+    if ( exists $self->{_watch_for} ) {
+        $self->{_found}{ $self->{_watch_for_id} }{_content} .= $skip . $text;
+        $self->{_watch_for_depth}++ if $self->{_watch_for} eq $type;
         return;
     }
-    $self->{_found}{$id} = $attr;
+
+    unless ( $id and exists $self->{_extract_ids}{$id} ) {
+        return;
+    }
+    $self->{_found}{$id}             = $attr;
     $self->{_found}{$id}{_start_tag} = $text;
-    $self->{_watch_for_id} = $id;
-    $self->{_watch_for} = $type;
+    $self->{_watch_for_id}           = $id;
+    $self->{_watch_for}              = $type;
 }
 
-sub end_handler{
-    my ($self, $type, $text, $skip) = @_;
-    unless (exists $self->{_watch_for} and $type eq $self->{_watch_for}){
-        if (exists $self->{_watch_for}){
-            $self->{_found}{$self->{_watch_for_id}}{_content} .= $skip . $text;
-         }
+sub end_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    unless ( exists $self->{_watch_for} and $type eq $self->{_watch_for} ) {
+        if ( exists $self->{_watch_for} ) {
+            $self->{_found}{ $self->{_watch_for_id} }{_content} .=
+              $skip . $text;
+        }
         return;
     }
-     $self->{_found}{$self->{_watch_for_id}}{_content} .= $skip;
-     
+    $self->{_found}{ $self->{_watch_for_id} }{_content} .= $skip;
+
     $self->{_watch_for_depth}--;
-    if ($self->{_watch_for_depth}>=0){
-        $self->{_found}{$self->{_watch_for_id}}{_content} .=  $text;
+    if ( $self->{_watch_for_depth} >= 0 ) {
+        $self->{_found}{ $self->{_watch_for_id} }{_content} .= $text;
         return;
-    } 
-    $self->{_found}{$self->{_watch_for_id}}{_end_tag} = $text;
+    }
+    $self->{_found}{ $self->{_watch_for_id} }{_end_tag} = $text;
     delete $self->{_watch_for};
 }
 
-sub comment_handler{
-    my ($self,  $text, $skip) = @_;
-    
+sub comment_handler {
+    my ( $self, $text, $skip ) = @_;
+
     my $id = lc $text;
     $id =~ s/\s//g;
-    
+
     #warn "comment [$id] \n";
-    
-    if (exists $self->{_watch_for}){
-	    if ($self->{_watch_for_id} =~ /^<!--/){
-		    $self->{_found}{$self->{_watch_for_id}}{_content} .= $skip;
-		    $self->{_found}{$self->{_watch_for_id}}{_end_tag} = $text;
-		    delete $self->{_watch_for};
-		   return;
-	    }
-	     $self->{_found}{$self->{_watch_for_id}}{_content} .= $skip.$text;
-	 return;
-    }
-    
-    unless (exists $self->{_extract_ids}{$id}){
+
+    if ( exists $self->{_watch_for} ) {
+        if ( $self->{_watch_for_id} =~ /^<!--/ ) {
+            $self->{_found}{ $self->{_watch_for_id} }{_content} .= $skip;
+            $self->{_found}{ $self->{_watch_for_id} }{_end_tag} = $text;
+            delete $self->{_watch_for};
+            return;
+        }
+        $self->{_found}{ $self->{_watch_for_id} }{_content} .= $skip . $text;
         return;
     }
-    $self->{_found}{$id} = {};
+
+    unless ( exists $self->{_extract_ids}{$id} ) {
+        return;
+    }
+    $self->{_found}{$id}             = {};
     $self->{_found}{$id}{_start_tag} = $text;
-    $self->{_watch_for_id} = $id;
-    $self->{_watch_for} = $id;
+    $self->{_watch_for_id}           = $id;
+    $self->{_watch_for}              = $id;
+
     #warn "watching for $id";
 }
 
+sub new {
+    my ( $class, @args ) = @_;
+    my $self = HTML::Parser::new(
+        $class,
+        start_h =>
+          [ 'start_handler', "self,tagname, attr, text, skipped_text" ],
+        end_h     => [ 'end_handler',     "self,tagname, text, skipped_text" ],
+        comment_h => [ 'comment_handler', 'self, text, skipped_text' ],
+    );
 
-
-sub new{
-    my ($class, @args) = @_;
-    my $self= HTML::Parser::new ( $class,
-        start_h => ['start_handler', "self,tagname, attr, text, skipped_text"],
-        end_h => ['end_handler', "self,tagname, text, skipped_text"],
-	comment_h => ['comment_handler',  'self, text, skipped_text'],
-	);
-    
-	my %args = map { ($_ => 1)} @args;
+    my %args = map { ( $_ => 1 ) } @args;
     $self->{_extract_ids} = \%args;
-    
+
     return $self;
 }
 
 package HTML::Manipulator::IDExtractor;
 use base qw(HTML::Parser);
 
-sub start_handler{
-    my ($self, $type, $attr) = @_;
+sub start_handler {
+    my ( $self, $type, $attr ) = @_;
     my $id = $attr->{id};
     return unless defined $id;
-    if ($self->{_filter}){
-	    foreach (@{$self->{_filter}}){
-		    if (ref $_ eq 'Regexp' && $id =~ $_){
-			    $self->{_found}{$id} = $type; return;
-		    }
-		    if (not ref $_ and $_ eq $id){
-			    $self->{_found}{$id} = $type; return;
-		    }
-	    }
-    }else{    
-	    $self->{_found}{$id} = $type;
+    if ( $self->{_filter} ) {
+        foreach ( @{ $self->{_filter} } ) {
+            if ( ref $_ eq 'Regexp' && $id =~ $_ ) {
+                $self->{_found}{$id} = $type;
+                return;
+            }
+            if ( not ref $_ and $_ eq $id ) {
+                $self->{_found}{$id} = $type;
+                return;
+            }
+        }
+    } else {
+        $self->{_found}{$id} = $type;
     }
 }
 
-sub new{
-    my ($class, @args) = @_;
-    my $self= HTML::Parser::new ( $class,
-        start_h => ['start_handler', "self, tagname, attr"],
-    );
-    $self->{_filter} = [ @args ] if @args;
+sub new {
+    my ( $class, @args ) = @_;
+    my $self =
+      HTML::Parser::new( $class,
+        start_h => [ 'start_handler', "self, tagname, attr" ], );
+    $self->{_filter} = [@args] if @args;
     return $self;
 }
 
 package HTML::Manipulator::TitleExtractor;
 use base qw(HTML::Parser);
 
-sub start_handler{
-    my ($self, $type, $text, $skip) = @_;
-    if (exists $self->{_watch_for}){
-         $self->{_found} .= $skip . $text;
-         return;
+sub start_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    if ( exists $self->{_watch_for} ) {
+        $self->{_found} .= $skip . $text;
+        return;
     }
-    if ($type eq 'title'){
-	    $self->{_watch_for} = 1;
+    if ( $type eq 'title' ) {
+        $self->{_watch_for} = 1;
     }
 }
 
-sub end_handler{
-	 my ($self, $type, $text, $skip) = @_;
-	if (exists $self->{_watch_for}){
-		$self->{_found} .= $skip;
-		if ($type eq 'title'){
-			delete $self->{_watch_for};
-		}
-		else{
-			$self->{_found} .= $text;
-		}
-	}
-   }
+sub end_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    if ( exists $self->{_watch_for} ) {
+        $self->{_found} .= $skip;
+        if ( $type eq 'title' ) {
+            delete $self->{_watch_for};
+        } else {
+            $self->{_found} .= $text;
+        }
+    }
+}
 
-
-sub new{
-    my ($class, @args) = @_;
-    my $self= HTML::Parser::new ( $class,
-        start_h => ['start_handler', "self,tagname, text, skipped_text"],
-        end_h => ['end_handler', "self,tagname, text, skipped_text"],
+sub new {
+    my ( $class, @args ) = @_;
+    my $self = HTML::Parser::new(
+        $class,
+        start_h => [ 'start_handler', "self,tagname, text, skipped_text" ],
+        end_h   => [ 'end_handler',   "self,tagname, text, skipped_text" ],
     );
-    
+
     return $self;
 }
 
 package HTML::Manipulator::TitleReplacer;
 use base qw(HTML::Parser);
 
-sub start_handler{
-    my ($self, $type, $text, $skip) = @_;
-    unless (exists $self->{_watch_for}){
-	    $self->{_collect} .= $skip . $text;
-	    if ($type eq 'title'){
-		    $self->{_watch_for} = 1;
-	    }
+sub start_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    unless ( exists $self->{_watch_for} ) {
+        $self->{_collect} .= $skip . $text;
+        if ( $type eq 'title' ) {
+            $self->{_watch_for} = 1;
+        }
     }
 }
 
-sub end_handler{
-	 my ($self, $type, $text, $skip) = @_;
-	if (exists $self->{_watch_for}){
-		if ($type eq 'title'){
-			delete $self->{_watch_for};
-			$self->{_collect} .= $self->{_new_title};
-		}
-		else{
-			$self->{_collect} .= $skip;
-		}
-		$self->{_collect} .= $text;
-	}
-	else{
-		$self->{_collect} .= $skip.$text;
-	}
-   }
+sub end_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    if ( exists $self->{_watch_for} ) {
+        if ( $type eq 'title' ) {
+            delete $self->{_watch_for};
+            $self->{_collect} .= $self->{_new_title};
+        } else {
+            $self->{_collect} .= $skip;
+        }
+        $self->{_collect} .= $text;
+    } else {
+        $self->{_collect} .= $skip . $text;
+    }
+}
 
-sub end_document_handler{
-    my ($self, $text) = @_;
+sub end_document_handler {
+    my ( $self, $text ) = @_;
     $self->{_collect} .= $text;
 }
 
-sub new{
-    my ($class, $title) = @_;
-    my $self= HTML::Parser::new ( $class,
-        start_h => ['start_handler', "self,tagname, text, skipped_text"],
-        end_h => ['end_handler', "self,tagname, text, skipped_text"],
-	end_document_h =>['end_document_handler', "self, skipped_text"],
+sub new {
+    my ( $class, $title ) = @_;
+    my $self = HTML::Parser::new(
+        $class,
+        start_h => [ 'start_handler', "self,tagname, text, skipped_text" ],
+        end_h   => [ 'end_handler',   "self,tagname, text, skipped_text" ],
+        end_document_h => [ 'end_document_handler', "self, skipped_text" ],
     );
     $self->{_new_title} = $title;
     return $self;
@@ -466,30 +547,282 @@ sub new{
 package HTML::Manipulator::CommentExtractor;
 use base qw(HTML::Parser);
 
-sub comment_handler{
-    my ($self, $text, $token0) = @_;
-    if ($self->{_filter}){
-	    my $id = lc $token0;
-	    $id =~ s/\s//g;
-	    foreach (@{$self->{_filter}}){
-		    if (ref $_ eq 'Regexp' && $id =~ $_){
-			    push  @{$self->{_found}}, $text ; return;
-		    }
-		    if (not ref $_ and $_ eq $id){
-			    push  @{$self->{_found}}, $text ; return;
-		    }
-	    }
-    }else{    
-	  push  @{$self->{_found}}, $text ; return;
+sub comment_handler {
+    my ( $self, $text, $token0 ) = @_;
+    if ( $self->{_filter} ) {
+        my $id = lc $token0;
+        $id =~ s/\s//g;
+        foreach ( @{ $self->{_filter} } ) {
+            if ( ref $_ eq 'Regexp' && $id =~ $_ ) {
+                push @{ $self->{_found} }, $text;
+                return;
+            }
+            if ( not ref $_ and $_ eq $id ) {
+                push @{ $self->{_found} }, $text;
+                return;
+            }
+        }
+    } else {
+        push @{ $self->{_found} }, $text;
+        return;
     }
 }
 
-sub new{
-    my ($class, @args) = @_;
-    my $self= HTML::Parser::new ( $class,
-        comment_h => ['comment_handler', "self,text,token0"],
+sub new {
+    my ( $class, @args ) = @_;
+    my $self =
+      HTML::Parser::new( $class,
+        comment_h => [ 'comment_handler', "self,text,token0" ], );
+    $self->{_filter} = [
+        map {
+            unless (ref) { $_ = lc $_; s/\s//g; }
+            $_;
+          } @args
+      ]
+      if @args;
+    return $self;
+}
+
+package HTML::Manipulator::Remover;
+use base qw(HTML::Parser);
+
+sub start_handler {
+    my ( $self, $type, $attr, $text, $skip ) = @_;
+    my $id = $attr->{id};
+    if ( exists $self->{_watch_for} ) {
+        $self->{_watch_for_depth}++ if $self->{_watch_for} eq $type;
+        return;
+    }
+    $self->{_collect} .= $skip;
+    unless ( $id and exists $self->{_remove_ids}{$id} ) {
+        $self->{_collect} .= $text;
+        return;
+    }
+
+    $self->{_watch_for} = $type;
+
+}
+
+sub end_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    unless ( exists $self->{_watch_for} ) {
+        $self->{_collect} .= $skip;
+        $self->{_collect} .= $text;
+        return;
+    }
+    if ( $type eq $self->{_watch_for} ) {
+        $self->{_watch_for_depth}--;
+        if ( $self->{_watch_for_depth} ) {
+            delete $self->{_watch_for};
+        }
+    }
+}
+
+sub end_document_handler {
+    my ( $self, $text ) = @_;
+    $self->{_collect} .= $text;
+}
+
+sub comment_handler {
+    my ( $self, $text, $skip ) = @_;
+    if ( exists $self->{_watch_for} ) {
+        if ( $self->{_watch_for} eq '<!--' ) {
+            delete $self->{_watch_for};
+        }
+        return;
+    }
+
+    my $id = lc $text;
+    $id =~ s/\s//g;
+
+    $self->{_collect} .= $skip;
+    unless ( $id and exists $self->{_remove_ids}{$id} ) {
+        $self->{_collect} .= $text;
+        return;
+    }
+    $self->{_watch_for} = '<!--';
+}
+
+sub new {
+    my ( $class, @args ) = @_;
+    my $self = HTML::Parser::new(
+        $class,
+        start_h =>
+          [ 'start_handler', "self,tagname, attr, text, skipped_text" ],
+        end_h => [ 'end_handler', "self,tagname, text, skipped_text" ],
+        end_document_h => [ 'end_document_handler', "self, skipped_text" ],
+        comment_h => [ 'comment_handler', 'self, text, skipped_text' ],
     );
-    $self->{_filter} = [ map { unless (ref){ $_ = lc $_; s/\s//g;}; $_;} @args ] if @args;
+
+    foreach (@args) {
+        $self->{_remove_ids}{$_} = 1;
+    }
+    $self->{_collect} = '';
+    return $self;
+}
+
+package HTML::Manipulator::Inserter;
+use base qw(HTML::Parser);
+
+sub start_handler {
+    my ( $self, $type, $attr, $text, $skip ) = @_;
+    my $id = $attr->{id};
+    $self->{_collect} .= $skip;
+    if ( exists $self->{_watch_for} ) {
+        $self->{_collect} .= $text;
+        $self->{_watch_for_depth}++ if $self->{_watch_for} eq $type;
+
+        return;
+    }
+
+    if ( $id and exists $self->{_insert_ids_beforeBegin}{$id} ) {
+        $self->{_collect} .= $self->{_insert_ids_beforeBegin}{$id};
+        delete $self->{_insert_ids_beforeBegin}{$id};
+        $self->{_found}{$id} = 1;
+    }
+
+    $self->{_collect} .= $text;
+
+    if ( $id and exists $self->{_insert_ids_afterBegin}{$id} ) {
+        $self->{_collect} .= $self->{_insert_ids_afterBegin}{$id};
+        delete $self->{_insert_ids_afterBegin}{$id};
+        $self->{_found}{$id} = 1;
+    }
+
+    unless (
+        $id
+        and (  exists $self->{_insert_ids_afterEnd}{$id}
+            or exists $self->{_insert_ids_beforeEnd}{$id} )
+      )
+    {
+        return;
+    }
+    $self->{_watch_for}    = $type;
+    $self->{_watch_for_id} = $id;
+
+}
+
+sub end_handler {
+    my ( $self, $type, $text, $skip ) = @_;
+    $self->{_collect} .= $skip;
+
+    unless ( exists $self->{_watch_for} ) {
+        $self->{_collect} .= $text;
+        return;
+    }
+
+    if ( $type eq $self->{_watch_for} ) {
+        $self->{_watch_for_depth}--;
+
+        if ( $self->{_watch_for_depth} ) {
+            my $id = $self->{_watch_for_id};
+            if ( $id and exists $self->{_insert_ids_beforeEnd}{$id} ) {
+                $self->{_collect} .= $self->{_insert_ids_beforeEnd}{$id};
+                delete $self->{_insert_ids_beforeEnd}{$id};
+                $self->{_found}{$id} = 1;
+            }
+            delete $self->{_watch_for};
+        }
+
+        $self->{_collect} .= $text;
+
+        if ( $self->{_watch_for_depth} ) {
+            my $id = $self->{_watch_for_id};
+            if ( $id and exists $self->{_insert_ids_afterEnd}{$id} ) {
+                $self->{_collect} .= $self->{_insert_ids_afterEnd}{$id};
+                delete $self->{_insert_ids_afterEnd}{$id};
+                $self->{_found}{$id} = 1;
+            }
+            delete $self->{_watch_for};
+        }
+    } else {
+        $self->{_collect} .= $text;
+    }
+}
+
+sub end_document_handler {
+    my ( $self, $text ) = @_;
+    $self->{_collect} .= $text;
+}
+
+sub comment_handler {
+    my ( $self, $text, $skip ) = @_;
+
+    $self->{_collect} .= $skip;
+
+    if ( exists $self->{_watch_for} ) {
+        if ( $self->{_watch_for} eq '<!--' ) {
+            delete $self->{_watch_for};
+            my $id = $self->{_watch_for_id};
+
+            if ( exists $self->{_insert_ids_beforeEnd}{$id} ) {
+                $self->{_collect} .= $self->{_insert_ids_beforeEnd}{$id};
+                delete $self->{_insert_ids_beforeEnd}{$id};
+                $self->{_found}{$id} = 1;
+            }
+
+            $self->{_collect} .= $text;
+
+            if ( exists $self->{_insert_ids_afterEnd}{$id} ) {
+                $self->{_collect} .= $self->{_insert_ids_afterEnd}{$id};
+                delete $self->{_insert_ids_afterEnd}{$id};
+                $self->{_found}{$id} = 1;
+            }
+
+        } else {
+            $self->{_collect} .= $text;
+        }
+        return;
+    }
+
+    my $id = lc $text;
+    $id =~ s/\s//g;
+
+    if ( $id and exists $self->{_insert_ids_beforeBegin}{$id} ) {
+        $self->{_collect} .= $self->{_insert_ids_beforeBegin}{$id};
+        delete $self->{_insert_ids_beforeBegin}{$id};
+        $self->{_found}{$id} = 1;
+
+    }
+
+    $self->{_collect} .= $text;
+    if ( $id and exists $self->{_insert_ids_afterBegin}{$id} ) {
+        $self->{_collect} .= $self->{_insert_ids_afterBegin}{$id};
+        delete $self->{_insert_ids_afterBegin}{$id};
+        $self->{_found}{$id} = 1;
+
+    }
+
+    unless (
+        $id
+        and (  exists $self->{_insert_ids_afterEnd}{$id}
+            or exists $self->{_insert_ids_beforeEnd}{$id} )
+      )
+    {
+        return;
+    }
+
+    $self->{_watch_for}    = '<!--';
+    $self->{_watch_for_id} = $id;
+}
+
+sub new {
+    my ( $class, $args ) = @_;
+    my $self = HTML::Parser::new(
+        $class,
+        start_h =>
+          [ 'start_handler', "self,tagname, attr, text, skipped_text" ],
+        end_h => [ 'end_handler', "self,tagname, text, skipped_text" ],
+        end_document_h => [ 'end_document_handler', "self, skipped_text" ],
+        comment_h => [ 'comment_handler', 'self, text, skipped_text' ],
+    );
+
+    $self->{_insert_ids_beforeBegin} = $args->{before_begin};
+    $self->{_insert_ids_afterBegin}  = $args->{after_begin};
+    $self->{_insert_ids_beforeEnd}   = $args->{before_end};
+    $self->{_insert_ids_afterEnd}    = $args->{after_end};
+
+    $self->{_collect} = '';
     return $self;
 }
 
@@ -644,6 +977,28 @@ adding the special "attribute" _content to the attribute hashref.
          _content => 'Slashdot',
         href=>'http://www.slashdot.org/' }
     );
+
+=head3 Insert adjacent HTML
+
+There is a family of functions to insert some text into
+the source HTML document before or after a given DOM element.
+
+	my $new = HTML::Manipulator::insert_before_begin($html, 
+		headline77 => '<b>',
+		);
+	
+	my $new = HTML::Manipulator::insert_after_begin($html, 
+		headline77 => '[**] ',
+		);
+		
+	my $new = HTML::Manipulator::insert_before_end($html, 
+		headline77 => '[**]',
+		);
+		
+	my $new = HTML::Manipulator::insert_after_end($html, 
+		headline77 => '</b>',
+		);
+
 
 =head3 Replace the document title
 
@@ -882,12 +1237,12 @@ in the wild. Handle with care. Report bugs to get them fixed.
 
 =head1 AUTHOR
 
-Thilo Planz, E<lt>planz@epost.deE<gt>
+Thilo Planz, E<lt>thilo@cpan.orgE<gt>
 
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright 2004 by Thilo Planz
+Copyright 2004/05 by Thilo Planz
 
 This library is free software; you can redistribute it and/or modify
 it under the same terms as Perl itself. 
